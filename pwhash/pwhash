@@ -1,0 +1,87 @@
+#!/usr/bin/python3
+
+############################# Reads a file as input, parses file line by line, ##############################
+######## splits once at : as delimiter, parses first part as salt and second part as password ###############
+
+import hashlib, base64, sys, os
+import argparse
+from argparse import RawTextHelpFormatter
+
+### USAGE: pwhash [-h] [-H {md5,sha1,sha256}] [-e {binary,base64,hex}] [-i IFILE]
+### DEPS: argparse (install using pip3 install argparse)
+
+###### Hashes list of passwords in 'file_in', with salt provided by user in the format 'salt:password' in 'file_in'######
+###### file_in: input file name as string; hash_opt: switch for hash algs, enc_opt: switch for encoding#####
+
+def hash_and_encode(salt, password, hash_opt, enc_opt):
+	if hash_opt == 'md5':
+		fingerprint = hashlib.md5()
+	elif hash_opt == 'sha1':
+		fingerprint = hashlib.sha1()
+	elif hash_opt == 'sha256':
+		fingerprint = hashlib.sha256()
+
+	fingerprint.update(salt+password)
+
+	if enc_opt == 'binary':
+		fp_out = fingerprint.digest()
+		return fp_out
+	elif enc_opt == 'hex':
+		fp_out = fingerprint.hexdigest().encode()
+		return fp_out
+	elif enc_opt == 'base64':
+		fp_out = base64.b64encode(fingerprint.digest())
+		return fp_out
+
+def pswdHash_with_salt(file_in, hash_opt, enc_opt):
+	file1 = os.fdopen(sys.stdout.fileno(), 'wb') ######### printing to std_out by default
+
+	with open (file_in, 'r') as file: ######## open file with read perms, read all lines, split at ':' for each line
+		lines = file.readlines()
+		lineno=0
+		for line in lines:
+			lineno = lineno+1
+			try:
+				string = line.split(":",1) ############# splits string into salt:password at first occurrence of ':', no checking provided if the string is indeed having at least one : symbol
+				salt = string[0].encode() ##################### convert salt and password to UTF-8 so hashlib doesn't whine
+				password = string[1].encode()
+				password = password.strip(b'\n')
+			except IndexError:
+				print("I don't understand line", lineno, "in", file_in, "(so I'm giving up).", file=sys.stderr)
+				exit()
+			fp = hash_and_encode(salt,password,hash_opt,enc_opt)
+			file1.write(salt+':'.encode()+fp)
+			file1.write(b"\n")
+			file1.flush()
+	file.close()
+	return None
+
+
+def main():
+	file_def = './passwords'         ################# Hardcoded password file name because why not
+	######## Parsing cmd line args ###############
+	parser = argparse.ArgumentParser(description="The ÜB3R-SECURE(tm) pa$$w0rd hasher 1.0, now with delicious salt\n\n(NB: This isn't how you really hash password. This tool is strictly for use\n     in introductory computer security courses like CPSC329. DON'T USE IT\n     FOR ANYTHING ELSE--only a negligent fool would do that! And you're\n     not a negligent fool, are you?)", formatter_class=RawTextHelpFormatter)
+	########## adding allowed options for hash and encoding ###############
+	parser.add_argument("-H", "--hash", choices=["md5", "sha1", "sha256"], default="md5", type=str, help="hash algorithm  (default: sha256)")
+	parser.add_argument("-e", "--enc", choices=["binary", "base64", "hex"], default="binary", type=str, help="output encoding (default: binary)")
+	parser.add_argument("-i", "--ifile", default = file_def, type=str, help="input filename  (default: ./passwords)")
+	args = vars(parser.parse_args())
+	######## Throw warning if no option is provided for encoding #########
+	if args["enc"] == "binary":
+		print ("\n\033[1;37;44m WARNING: Printing raw bytes to stdout might bork your terminal session; I hope you're piping stdout to a file ;) \033[1;m\n", file=sys.stderr)
+
+	try:
+		f = open(args["ifile"])
+	except IOError:
+		print("Cannot open", args["ifile"], ". Maybe you do not have a passwords file yet.", file=sys.stderr)
+		exit()
+
+	file_in = args["ifile"]
+	hash_opt = args["hash"]
+	enc_opt = args["enc"]
+
+	pswdHash_with_salt(file_in, hash_opt, enc_opt)
+
+if __name__ == "__main__":
+	main()
+
